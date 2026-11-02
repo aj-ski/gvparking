@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parking Permit Checker</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    color-scheme: light;
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #0a84ff;
+    --accent-text: #ffffff;
+    --good: #1a9e3f;
+    --bad: #d93025;
+    --line: #e0e0e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f5f5f7;
+      --muted: #98989f;
+      --accent: #0a84ff;
+      --accent-text: #ffffff;
+      --good: #30d158;
+      --bad: #ff453a;
+      --line: #38383a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989f;
+    --accent: #0a84ff; --accent-text: #ffffff; --good: #30d158; --bad: #ff453a; --line: #38383a;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px 20px;
+  }
+  main { max-width: 420px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: 0 0 20px; }
+  button {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border: 0;
+    border-radius: 12px;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; }
+  .card {
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .muted { color: var(--muted); font-size: 0.9rem; margin: 0 0 6px; }
+  .lot { font-weight: 700; font-size: 1.05rem; margin: 0 0 12px; }
+  .permit { font-size: 1.1rem; padding: 8px 0; border-top: 1px solid var(--line); }
+  .permit.ok { color: var(--good); }
+  .permit.no { color: var(--bad); }
+  .error { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Parking Permit Checker</h1>
+  <button id="check">Check My Parking Spot</button>
+
+  <div class="card">
+    <p class="muted" id="location">Location: (not checked yet)</p>
+    <p class="lot" id="lot">Current lot: --</p>
+    <div class="permit" id="p1">Permit 1: --</div>
+    <div class="permit" id="p2">Permit 2: --</div>
+    <div class="permit" id="p3">Permit 3: --</div>
+  </div>
+</main>
+
+<script>
+// ---------------------------------------------------------------------------
+// Parking lot shapes: [lat, lon] corners. Edit to map around your test area.
+// ---------------------------------------------------------------------------
+const LIST_1 = [
+  [[65, 65],[65, 70],[70, 65],[70, 70]],
+];
+const LIST_2 = [
+  [[55, 55], [60, 55], [60, 60], [55, 60]],
+];
+const LIST_3 = [
+  [[42, -80], [45, -80], [45, -90], [42, -90]], // triangle example
+];
+const PARKING_LISTS = { 1: LIST_1, 2: LIST_2, 3: LIST_3 };
+
+// Which lists each permit may park in
+const PERMIT_ACCESS = { 1: [1], 2: [1, 2], 3: [1, 2, 3] };
+
+// To hardcode your location for testing, set this to [lat, lon].
+// Leave it as null to use the phone's live GPS.
+const HARDCODED_LOCATION = null;
+// const HARDCODED_LOCATION = [40.0005, -75.0005]; // inside LIST_1
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+function pointInPolygon(point, polygon) {
+  const [y, x] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i];
+    const [yj, xj] = polygon[j];
+    if ((yi > y) !== (yj > y)) {
+      const xCross = (xj - xi) * (y - yi) / (yj - yi) + xi;
+      if (x < xCross) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function findListForPoint(point) {
+  for (const [num, polygons] of Object.entries(PARKING_LISTS)) {
+    if (polygons.some(poly => pointInPolygon(point, poly))) return Number(num);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Location
+// ---------------------------------------------------------------------------
+function getLocation() {
+  if (HARDCODED_LOCATION) {
+    return Promise.resolve({ point: HARDCODED_LOCATION, accuracy: null });
+  }
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("This browser does not support location."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        point: [pos.coords.latitude, pos.coords.longitude],
+        accuracy: pos.coords.accuracy,
+      }),
+      err => reject(new Error(
+        err.code === 1 ? "Location permission denied. Allow it for this site in Safari settings."
+        : err.code === 3 ? "Timed out waiting for a GPS fix."
+        : "Could not determine location."
+      )),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+const btn = document.getElementById("check");
+const locEl = document.getElementById("location");
+const lotEl = document.getElementById("lot");
+
+btn.addEventListener("click", async () => {
+  btn.disabled = true;
+  locEl.classList.remove("error");
+  locEl.textContent = "Locating…";
+  try {
+    const { point, accuracy } = await getLocation();
+    const accText = accuracy != null ? ` (±${Math.round(accuracy)} m)` : "";
+    locEl.textContent = `Location: ${point[0].toFixed(5)}, ${point[1].toFixed(5)}${accText}`;
+
+    const current = findListForPoint(point);
+    lotEl.textContent = current === null
+      ? "Current lot: not in any parking lot"
+      : `Current lot: LIST_${current}`;
+
+    for (const permit of [1, 2, 3]) {
+      const valid = current !== null && PERMIT_ACCESS[permit].includes(current);
+      const el = document.getElementById("p" + permit);
+      el.textContent = valid ? `Permit ${permit}: ✔ Valid lot` : `Permit ${permit}: ✘ Not a valid lot`;
+      el.className = "permit " + (valid ? "ok" : "no");
+    }
+  } catch (e) {
+    locEl.textContent = e.message;
+    locEl.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
