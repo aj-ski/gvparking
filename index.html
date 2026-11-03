@@ -85,9 +85,9 @@
   <div class="card">
     <p class="muted" id="location">Location: (not checked yet)</p>
     <p class="lot" id="lot">Current lot: --</p>
-    <div class="permit" id="p1">Permit 1: --</div>
-    <div class="permit" id="p2">Permit 2: --</div>
-    <div class="permit" id="p3">Permit 3: --</div>
+    <div class="permit" id="p1">Student Commuter: --</div>
+    <div class="permit" id="p2">Valley Resident: --</div>
+    <div class="permit" id="p3">Calder Resident: --</div>
   </div>
 </main>
 
@@ -95,12 +95,15 @@
 // ---------------------------------------------------------------------------
 // Parking lot shapes: [lat, lon] corners. Edit to map around your test area.
 // ---------------------------------------------------------------------------
+// Student commuter
 const LIST_1 = [
   [[65, 65],[65, 70],[70, 65],[70, 70]],
 ];
+// Valley resident
 const LIST_2 = [
   [[55, 55], [60, 55], [60, 60], [55, 60]],
 ];
+// Calder resident
 const LIST_3 = [
   [[42, -80], [45, -80], [45, -90], [42, -90]], // triangle example
 ];
@@ -108,6 +111,13 @@ const PARKING_LISTS = { 1: LIST_1, 2: LIST_2, 3: LIST_3 };
 
 // Which lists each permit may park in
 const PERMIT_ACCESS = { 1: [1], 2: [1, 2], 3: [1, 2, 3] };
+
+// Display names for each list
+const LOT_NAMES = {
+  1: "Student Commuter",
+  2: "Valley Resident",
+  3: "Calder Resident",
+};
 
 // To hardcode your location for testing, set this to [lat, lon].
 // Leave it as null to use the phone's live GPS.
@@ -183,13 +193,13 @@ btn.addEventListener("click", async () => {
 
     const current = findListForPoint(point);
     lotEl.textContent = current === null
-      ? "Current lot: not in any parking lot"
-      : `Current lot: LIST_${current}`;
+      ? "Current lot: Invalid for any student permit."
+      : `Current lot: ${LOT_NAMES[current]}`;
 
     for (const permit of [1, 2, 3]) {
       const valid = current !== null && PERMIT_ACCESS[permit].includes(current);
       const el = document.getElementById("p" + permit);
-      el.textContent = valid ? `Permit ${permit}: ✔ Valid lot` : `Permit ${permit}: ✘ Not a valid lot`;
+      el.textContent = valid ? `${LOT_NAMES[permit]}: ✔ Valid lot` : `${LOT_NAMES[permit]}: ✘ Not a valid lot`;
       el.className = "permit " + (valid ? "ok" : "no");
     }
   } catch (e) {
